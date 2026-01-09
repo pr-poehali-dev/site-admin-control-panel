@@ -3,13 +3,20 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Icon from '@/components/ui/icon';
 
 interface Award {
   id: string;
   name: string;
   image: string;
-  recipients: string[];
+  recipients: { nickname: string; date: string }[];
+}
+
+interface RegisteredUser {
+  id: string;
+  nickname: string;
+  rank: string;
 }
 
 const MOCK_AWARDS: Award[] = [
@@ -17,50 +24,74 @@ const MOCK_AWARDS: Award[] = [
     id: '1',
     name: 'Медаль "За отвагу"',
     image: '🎖️',
-    recipients: ['Генерал Командир', 'Полковник Петров', 'Майор Сидоров'],
+    recipients: [
+      { nickname: 'Генерал Командир', date: '2025-12-01' },
+      { nickname: 'Полковник Петров', date: '2025-12-15' },
+    ],
   },
   {
     id: '2',
     name: 'Орден "За службу"',
     image: '🏅',
-    recipients: ['Подполковник Иванов', 'Капитан Смирнов'],
+    recipients: [
+      { nickname: 'Подполковник Иванов', date: '2026-01-05' },
+    ],
   },
   {
     id: '3',
     name: 'Медаль "За выслугу лет"',
     image: '🥇',
-    recipients: ['Генерал Командир', 'Полковник Петров'],
+    recipients: [
+      { nickname: 'Генерал Командир', date: '2025-11-20' },
+    ],
   },
+];
+
+const MOCK_USERS: RegisteredUser[] = [
+  { id: '1', nickname: 'Генерал Командир', rank: 'Генерал' },
+  { id: '2', nickname: 'Полковник Петров', rank: 'Полковник' },
+  { id: '3', nickname: 'Подполковник Иванов', rank: 'Подполковник' },
+  { id: '4', nickname: 'Капитан Смирнов', rank: 'Капитан' },
+  { id: '5', nickname: 'Сержант Сидоров', rank: 'Сержант' },
 ];
 
 interface AwardsPageProps {
   canEdit?: boolean;
+  registeredUsers?: RegisteredUser[];
 }
 
-const AwardsPage = ({ canEdit }: AwardsPageProps) => {
+const AwardsPage = ({ canEdit, registeredUsers = MOCK_USERS }: AwardsPageProps) => {
   const [awards, setAwards] = useState<Award[]>(MOCK_AWARDS);
   const [selectedAward, setSelectedAward] = useState<Award | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newRecipient, setNewRecipient] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
 
   const handleAddRecipient = () => {
-    if (!selectedAward || !newRecipient.trim()) return;
+    if (!selectedAward || !selectedUserId) return;
+
+    const selectedUser = registeredUsers.find(u => u.id === selectedUserId);
+    if (!selectedUser) return;
+
+    const newRecipient = {
+      nickname: selectedUser.nickname,
+      date: new Date().toISOString().split('T')[0],
+    };
 
     const updatedAwards = awards.map(award =>
       award.id === selectedAward.id
-        ? { ...award, recipients: [...award.recipients, newRecipient.trim()] }
+        ? { ...award, recipients: [...award.recipients, newRecipient] }
         : award
     );
 
     setAwards(updatedAwards);
-    setSelectedAward({ ...selectedAward, recipients: [...selectedAward.recipients, newRecipient.trim()] });
-    setNewRecipient('');
+    setSelectedAward({ ...selectedAward, recipients: [...selectedAward.recipients, newRecipient] });
+    setSelectedUserId('');
   };
 
-  const handleRemoveRecipient = (recipientName: string) => {
+  const handleRemoveRecipient = (recipientNickname: string) => {
     if (!selectedAward) return;
 
-    const updatedRecipients = selectedAward.recipients.filter(r => r !== recipientName);
+    const updatedRecipients = selectedAward.recipients.filter(r => r.nickname !== recipientNickname);
     const updatedAwards = awards.map(award =>
       award.id === selectedAward.id
         ? { ...award, recipients: updatedRecipients }
@@ -115,15 +146,20 @@ const AwardsPage = ({ canEdit }: AwardsPageProps) => {
                     key={idx}
                     className="flex items-center justify-between p-3 bg-muted rounded"
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon name="User" size={16} className="text-primary" />
-                      <span>{recipient}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Icon name="User" size={16} className="text-primary" />
+                        <span className="font-medium">{recipient.nickname}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground ml-6">
+                        Награждён: {new Date(recipient.date).toLocaleDateString('ru-RU')}
+                      </p>
                     </div>
                     {canEdit && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleRemoveRecipient(recipient)}
+                        onClick={() => handleRemoveRecipient(recipient.nickname)}
                       >
                         <Icon name="X" size={16} />
                       </Button>
@@ -135,15 +171,23 @@ const AwardsPage = ({ canEdit }: AwardsPageProps) => {
 
             {canEdit && (
               <div className="pt-4 border-t border-border">
-                <label className="text-sm font-medium">Добавить награждённого</label>
+                <label className="text-sm font-medium">Наградить пользователя</label>
                 <div className="flex gap-2 mt-2">
-                  <Input
-                    value={newRecipient}
-                    onChange={(e) => setNewRecipient(e.target.value)}
-                    placeholder="Введите ФИО"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddRecipient()}
-                  />
-                  <Button onClick={handleAddRecipient}>
+                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Выберите пользователя" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {registeredUsers
+                        .filter(user => !selectedAward?.recipients.some(r => r.nickname === user.nickname))
+                        .map(user => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.nickname} ({user.rank})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleAddRecipient} disabled={!selectedUserId}>
                     <Icon name="Plus" size={18} />
                   </Button>
                 </div>

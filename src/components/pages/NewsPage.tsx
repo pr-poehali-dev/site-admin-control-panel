@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import Icon from '@/components/ui/icon';
 
 interface NewsPost {
@@ -14,6 +14,7 @@ interface NewsPost {
   date: string;
   image?: string;
   reactions: number;
+  authorId?: string;
 }
 
 const MOCK_NEWS: NewsPost[] = [
@@ -43,23 +44,110 @@ interface NewsPageProps {
 const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
   const [news, setNews] = useState<NewsPost[]>(MOCK_NEWS);
   const [isAddingPost, setIsAddingPost] = useState(false);
-  const [newPost, setNewPost] = useState({ title: '', content: '' });
+  const [editingPost, setEditingPost] = useState<NewsPost | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [newPost, setNewPost] = useState({ title: '', content: '', image: '' });
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [formatting, setFormatting] = useState({ bold: false, italic: false, underline: false });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleAddPost = () => {
     if (!newPost.title || !newPost.content || !currentUser) return;
 
-    const post: NewsPost = {
-      id: Date.now().toString(),
-      title: newPost.title,
-      content: newPost.content,
-      author: currentUser.nickname,
-      date: new Date().toISOString().split('T')[0],
-      reactions: 0,
-    };
+    if (editingPost) {
+      setNews(news.map(post => 
+        post.id === editingPost.id 
+          ? { ...post, title: newPost.title, content: newPost.content, image: selectedImage || undefined }
+          : post
+      ));
+      setEditingPost(null);
+    } else {
+      const post: NewsPost = {
+        id: Date.now().toString(),
+        title: newPost.title,
+        content: newPost.content,
+        author: currentUser.nickname,
+        date: new Date().toISOString().split('T')[0],
+        reactions: 0,
+        image: selectedImage || undefined,
+        authorId: currentUser.nickname,
+      };
+      setNews([post, ...news]);
+    }
 
-    setNews([post, ...news]);
-    setNewPost({ title: '', content: '' });
+    setNewPost({ title: '', content: '', image: '' });
+    setSelectedImage(null);
     setIsAddingPost(false);
+  };
+
+  const handleEditPost = (post: NewsPost) => {
+    setEditingPost(post);
+    setNewPost({ title: post.title, content: post.content, image: post.image || '' });
+    setSelectedImage(post.image || null);
+    setIsAddingPost(true);
+  };
+
+  const handleDeletePost = (postId: string) => {
+    setNews(news.filter(post => post.id !== postId));
+    setDeletingPostId(null);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const applyFormatting = (format: 'bold' | 'italic' | 'underline' | 'heading') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = newPost.content.substring(start, end);
+    let formattedText = '';
+
+    switch (format) {
+      case 'bold':
+        formattedText = `**${selectedText}**`;
+        break;
+      case 'italic':
+        formattedText = `*${selectedText}*`;
+        break;
+      case 'underline':
+        formattedText = `__${selectedText}__`;
+        break;
+      case 'heading':
+        formattedText = `### ${selectedText}`;
+        break;
+    }
+
+    const newContent = 
+      newPost.content.substring(0, start) + 
+      formattedText + 
+      newPost.content.substring(end);
+
+    setNewPost({ ...newPost, content: newContent });
+  };
+
+  const renderFormattedText = (text: string) => {
+    return text
+      .split('\n')
+      .map((line, i) => {
+        const formatted = line
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/__(.+?)__/g, '<u>$1</u>')
+          .replace(/^### (.+)$/g, '<h3 class="text-lg font-bold mt-2 mb-1">$1</h3>');
+        
+        return <div key={i} dangerouslySetInnerHTML={{ __html: formatted }} />;
+      });
   };
 
   const handleReaction = (postId: string) => {
@@ -84,9 +172,9 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
                 Добавить пост
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card max-w-2xl">
+            <DialogContent className="bg-card max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Создать новость</DialogTitle>
+                <DialogTitle>{editingPost ? 'Редактировать новость' : 'Создать новость'}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -99,16 +187,94 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Содержание</label>
-                  <Textarea
-                    value={newPost.content}
-                    onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                    placeholder="Введите текст новости"
-                    className="mt-1 min-h-[200px]"
+                  <label className="text-sm font-medium">Изображение</label>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-2"
+                    >
+                      <Icon name="Upload" size={16} />
+                      Загрузить
+                    </Button>
+                    {selectedImage && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setSelectedImage(null)}
+                      >
+                        <Icon name="X" size={16} />
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
                   />
+                  {selectedImage && (
+                    <img src={selectedImage} alt="Preview" className="mt-2 max-h-40 rounded" />
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Содержание</label>
+                  <div className="border rounded p-2 mt-1 space-y-2">
+                    <div className="flex gap-1 border-b pb-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => applyFormatting('bold')}
+                        title="Жирный"
+                      >
+                        <Icon name="Bold" size={16} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => applyFormatting('italic')}
+                        title="Курсив"
+                      >
+                        <Icon name="Italic" size={16} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => applyFormatting('underline')}
+                        title="Подчёркнутый"
+                      >
+                        <Icon name="Underline" size={16} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => applyFormatting('heading')}
+                        title="Заголовок"
+                      >
+                        <Icon name="Heading" size={16} />
+                      </Button>
+                    </div>
+                    <textarea
+                      ref={textareaRef}
+                      value={newPost.content}
+                      onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+                      placeholder="Введите текст новости. Выделите текст и используйте кнопки форматирования."
+                      className="w-full min-h-[250px] bg-transparent resize-none focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Совет: выделите текст и нажмите кнопку форматирования
+                  </p>
                 </div>
                 <Button onClick={handleAddPost} className="w-full">
-                  Опубликовать
+                  {editingPost ? 'Сохранить' : 'Опубликовать'}
                 </Button>
               </div>
             </DialogContent>
@@ -120,7 +286,7 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
         {news.map((post) => (
           <Card key={post.id} className="military-border bg-card p-6">
             <div className="flex items-start justify-between mb-4">
-              <div>
+              <div className="flex-1">
                 <h2 className="text-xl font-bold mb-2">{post.title}</h2>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -133,8 +299,29 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
                   </span>
                 </div>
               </div>
+              {canEdit && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditPost(post)}
+                  >
+                    <Icon name="Edit" size={14} />
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDeletingPostId(post.id)}
+                  >
+                    <Icon name="Trash2" size={14} />
+                  </Button>
+                </div>
+              )}
             </div>
-            <p className="text-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
+            {post.image && (
+              <img src={post.image} alt={post.title} className="w-full rounded mb-4 max-h-96 object-cover" />
+            )}
+            <div className="text-foreground mb-4">{renderFormattedText(post.content)}</div>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -150,6 +337,23 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
           </Card>
         ))}
       </div>
+
+      <AlertDialog open={!!deletingPostId} onOpenChange={() => setDeletingPostId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить новость?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие нельзя отменить. Новость будет удалена навсегда.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletingPostId && handleDeletePost(deletingPostId)}>
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
