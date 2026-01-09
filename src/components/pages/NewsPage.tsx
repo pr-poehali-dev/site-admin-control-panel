@@ -15,6 +15,7 @@ interface NewsPost {
   image?: string;
   reactions: number;
   authorId?: string;
+  reactedUsers: string[];
 }
 
 const MOCK_NEWS: NewsPost[] = [
@@ -25,6 +26,7 @@ const MOCK_NEWS: NewsPost[] = [
     author: 'Генерал Командир',
     date: '2026-01-08',
     reactions: 12,
+    reactedUsers: [],
   },
   {
     id: '2',
@@ -33,6 +35,7 @@ const MOCK_NEWS: NewsPost[] = [
     author: 'Полковник Петров',
     date: '2026-01-07',
     reactions: 24,
+    reactedUsers: [],
   },
 ];
 
@@ -72,6 +75,7 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
         reactions: 0,
         image: selectedImage || undefined,
         authorId: currentUser.nickname,
+        reactedUsers: [],
       };
       setNews([post, ...news]);
     }
@@ -153,11 +157,25 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
   const handleReaction = (postId: string) => {
     if (!currentUser || currentUser.nickname === 'guest') return;
     
-    setNews(news.map(post => 
-      post.id === postId 
-        ? { ...post, reactions: post.reactions + 1 }
-        : post
-    ));
+    setNews(news.map(post => {
+      if (post.id !== postId) return post;
+      
+      const hasReacted = post.reactedUsers.includes(currentUser.nickname);
+      
+      if (hasReacted) {
+        return {
+          ...post,
+          reactions: post.reactions - 1,
+          reactedUsers: post.reactedUsers.filter(u => u !== currentUser.nickname),
+        };
+      } else {
+        return {
+          ...post,
+          reactions: post.reactions + 1,
+          reactedUsers: [...post.reactedUsers, currentUser.nickname],
+        };
+      }
+    }));
   };
 
   return (
@@ -324,7 +342,7 @@ const NewsPage = ({ canEdit, currentUser }: NewsPageProps) => {
             <div className="text-foreground mb-4">{renderFormattedText(post.content)}</div>
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant={currentUser && post.reactedUsers.includes(currentUser.nickname) ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => handleReaction(post.id)}
                 disabled={!currentUser}
