@@ -58,13 +58,16 @@ const MOCK_USERS: RegisteredUser[] = [
 interface AwardsPageProps {
   canEdit?: boolean;
   registeredUsers?: RegisteredUser[];
+  onAwardGiven?: (userId: string, awardId: string, awardName: string, awardIcon: string) => void;
 }
 
-const AwardsPage = ({ canEdit, registeredUsers = MOCK_USERS }: AwardsPageProps) => {
+const AwardsPage = ({ canEdit, registeredUsers = MOCK_USERS, onAwardGiven }: AwardsPageProps) => {
   const [awards, setAwards] = useState<Award[]>(MOCK_AWARDS);
   const [selectedAward, setSelectedAward] = useState<Award | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAddAwardDialog, setIsAddAwardDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [newAward, setNewAward] = useState({ name: '', icon: '' });
 
   const handleAddRecipient = () => {
     if (!selectedAward || !selectedUserId) return;
@@ -86,6 +89,29 @@ const AwardsPage = ({ canEdit, registeredUsers = MOCK_USERS }: AwardsPageProps) 
     setAwards(updatedAwards);
     setSelectedAward({ ...selectedAward, recipients: [...selectedAward.recipients, newRecipient] });
     setSelectedUserId('');
+
+    if (onAwardGiven) {
+      onAwardGiven(selectedUserId, selectedAward.id, selectedAward.name, selectedAward.image);
+    }
+  };
+
+  const handleAddAward = () => {
+    if (!newAward.name || !newAward.icon) return;
+
+    const award: Award = {
+      id: Date.now().toString(),
+      name: newAward.name,
+      image: newAward.icon,
+      recipients: [],
+    };
+
+    setAwards([...awards, award]);
+    setNewAward({ name: '', icon: '' });
+    setIsAddAwardDialog(false);
+  };
+
+  const handleDeleteAward = (awardId: string) => {
+    setAwards(awards.filter(a => a.id !== awardId));
   };
 
   const handleRemoveRecipient = (recipientNickname: string) => {
@@ -104,21 +130,72 @@ const AwardsPage = ({ canEdit, registeredUsers = MOCK_USERS }: AwardsPageProps) 
 
   return (
     <div className="container max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary tracking-wider">НАГРАДЫ</h1>
-        <p className="text-muted-foreground mt-2">Список наград и их обладателей</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-primary tracking-wider">НАГРАДЫ</h1>
+          <p className="text-muted-foreground mt-2">Список наград и их обладателей</p>
+        </div>
+        {canEdit && (
+          <Dialog open={isAddAwardDialog} onOpenChange={setIsAddAwardDialog}>
+            <Button onClick={() => setIsAddAwardDialog(true)} className="gap-2">
+              <Icon name="Plus" size={18} />
+              Добавить награду
+            </Button>
+            <DialogContent className="bg-card">
+              <DialogHeader>
+                <DialogTitle>Создать новую награду</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Название награды</label>
+                  <Input
+                    value={newAward.name}
+                    onChange={(e) => setNewAward({ ...newAward, name: e.target.value })}
+                    placeholder='Медаль "За отвагу"'
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Иконка (эмодзи)</label>
+                  <Input
+                    value={newAward.icon}
+                    onChange={(e) => setNewAward({ ...newAward, icon: e.target.value })}
+                    placeholder="🎖️"
+                    className="mt-1 text-2xl"
+                  />
+                </div>
+                <Button onClick={handleAddAward} className="w-full">
+                  Создать
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {awards.map((award) => (
           <Card
             key={award.id}
-            className="military-border bg-card p-6 cursor-pointer hover:scale-105 transition-transform"
+            className="military-border bg-card p-6 cursor-pointer hover:scale-105 transition-transform relative"
             onClick={() => {
               setSelectedAward(award);
               setIsDialogOpen(true);
             }}
           >
+            {canEdit && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteAward(award.id);
+                }}
+              >
+                <Icon name="Trash2" size={14} />
+              </Button>
+            )}
             <div className="text-6xl text-center mb-4">{award.image}</div>
             <h3 className="text-center font-bold text-sm">{award.name}</h3>
             <p className="text-center text-xs text-muted-foreground mt-2">

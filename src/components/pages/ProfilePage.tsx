@@ -5,6 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import Icon from '@/components/ui/icon';
 
 interface UserProfile {
@@ -12,10 +17,12 @@ interface UserProfile {
   code: string;
   nickname: string;
   rank: string;
+  rankDate: Date;
   position: string;
+  positionDate: Date;
   avatar?: string;
   bio?: string;
-  awards: string[];
+  awards: Array<{ name: string; icon: string; date: string }>;
   pendingAvatar?: string;
 }
 
@@ -145,6 +152,14 @@ const ProfilePage = ({
                   <label className="text-sm font-medium text-muted-foreground">Должность</label>
                   <p className="text-lg">{user.position}</p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Дата повышения</label>
+                  <p className="text-lg">{format(user.rankDate, 'PPP', { locale: ru })}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Дата вступления в должность</label>
+                  <p className="text-lg">{format(user.positionDate, 'PPP', { locale: ru })}</p>
+                </div>
                 {user.bio && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">О себе</label>
@@ -157,7 +172,7 @@ const ProfilePage = ({
                     <div className="flex flex-wrap gap-2 mt-2">
                       {user.awards.map((award, idx) => (
                         <Badge key={idx} variant="secondary" className="text-lg px-3 py-1">
-                          {award}
+                          {award.icon} {award.name}
                         </Badge>
                       ))}
                     </div>
@@ -170,6 +185,69 @@ const ProfilePage = ({
               </>
             ) : (
               <>
+                <div>
+                  <label className="text-sm font-medium">Звание</label>
+                  <Select
+                    value={editedProfile.rank}
+                    onValueChange={(value) => setEditedProfile({ ...editedProfile, rank: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Рядовой', 'Ефрейтор', 'Младший сержант', 'Сержант', 'Старший сержант', 'Старшина', 'Прапорщик', 'Младший лейтенант', 'Лейтенант', 'Старший лейтенант', 'Капитан', 'Майор', 'Подполковник', 'Полковник', 'Генерал'].map(rank => (
+                        <SelectItem key={rank} value={rank}>{rank}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Дата последнего повышения</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start mt-1">
+                        <Icon name="Calendar" size={16} className="mr-2" />
+                        {format(editedProfile.rankDate, 'PPP', { locale: ru })}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={editedProfile.rankDate}
+                        onSelect={(date) => date && setEditedProfile({ ...editedProfile, rankDate: date })}
+                        locale={ru}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Должность</label>
+                  <Input
+                    value={editedProfile.position}
+                    onChange={(e) => setEditedProfile({ ...editedProfile, position: e.target.value })}
+                    placeholder="Введите должность"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Дата вступления в должность</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start mt-1">
+                        <Icon name="Calendar" size={16} className="mr-2" />
+                        {format(editedProfile.positionDate, 'PPP', { locale: ru })}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={editedProfile.positionDate}
+                        onSelect={(date) => date && setEditedProfile({ ...editedProfile, positionDate: date })}
+                        locale={ru}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <div>
                   <label className="text-sm font-medium">О себе</label>
                   <Textarea
